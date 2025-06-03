@@ -6,22 +6,22 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('categorias', function (Blueprint $table) {
-            $table->id();
-            $table->string('nombre')->unique();
+            // ID y nombre
+            $table->id()->comment('Clave primaria autoincrementable');
+            $table->string('nombre')->unique()->comment('Nombre único de la categoría (Ej: "Electrónicos")');
+            
+            // Metadata
             $table->timestamps();
+            $table->softDeletes()->comment('Fecha de eliminación suave');
+            
+            // Índices
+            $table->index('deleted_at');
         });
-        
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('categorias');
