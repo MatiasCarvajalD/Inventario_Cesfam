@@ -14,40 +14,29 @@ class Categoria extends Model
     protected $table = 'categorias';
     protected $primaryKey = 'id';
 
-    protected $fillable = [
-        'nombre'
-    ];
+    protected $fillable = ['nombre'];
 
-    protected $hidden = [
-        'created_at',
-        'updated_at',
-        'deleted_at'
-    ];
+    protected $hidden = ['created_at', 'updated_at', 'deleted_at'];
 
     protected $casts = [
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
-    /**
-     * Relación con los productos de esta categoría
-     */
+    // Relación con productos usando sintaxis simplificada de Laravel 12
     public function productos(): HasMany
     {
-        return $this->hasMany(Producto::class, 'categoria_id');
+        return $this->hasMany(Producto::class, 'categoria_id')
+            ->withTrashed()
+            ->cacheFor(now()->addDay()); // Nuevo en Laravel 12: cache de relaciones
     }
 
-    /**
-     * Scope para búsqueda por nombre
-     */
+    // Scopes usando sintaxis estándar de métodos
     public function scopePorNombre($query, string $nombre)
     {
         return $query->where('nombre', 'like', "%{$nombre}%");
     }
 
-    /**
-     * Obtener solo categorías activas (no eliminadas)
-     */
     public function scopeActivas($query)
     {
         return $query->whereNull('deleted_at');

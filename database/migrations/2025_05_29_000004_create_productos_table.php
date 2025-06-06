@@ -1,6 +1,6 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
+use App\Enums\ProductoEstado;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -9,52 +9,45 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('productos', function (Blueprint $table) {
-            // ===== 1. CLAVES =====
             $table->id()->comment('ID técnico autoincrementable');
             
-            // Identificadores de negocio
-            $table->string('numero_serie')->unique()
-                  ->nullable()
-                  ->comment('Número de serie del fabricante');
-                  
-            $table->string('numero_inventario')
-                  ->unique()
-                  ->nullable()
-                  ->comment('ID interno asignado por la organización');
+            // Identificadores
+            $table->string('numero_serie')->unique()->nullable()
+                ->comment('Número de serie del fabricante');
+            $table->string('numero_inventario')->unique()->nullable()
+                ->comment('ID interno asignado por la organización');
 
-            // ===== 2. DATOS BÁSICOS =====
-            $table->string('nombre')->comment('Nombre descriptivo del producto');
-            $table->text('descripcion')->nullable();
+            // Datos básicos
+            $table->string('nombre')->fulltext()->comment('Nombre descriptivo del producto');
+            $table->text('descripcion')->fulltext()->nullable();
             $table->integer('cantidad')->default(0)->comment('Stock actual');
             $table->string('modelo')->nullable();
             $table->string('ubicacion')->nullable();
 
-            // ===== 3. ESTADO (ENUM) =====
-            $table->enum('estado', [
-                'Disponible', 
-                'En Uso', 
-                'Mantenimiento', 
-                'Baja'
-            ])->default('Disponible')->comment('Estado físico del producto');
+            // Estado usando Enum
+            $table->enum('estado', \App\Enums\ProductoEstado::values())
+                ->default(\App\Enums\ProductoEstado::DISPONIBLE->value)
+                ->comment('Estado actual del producto según enumeración');
 
-            // ===== 4. RELACIONES =====
+            // Relaciones
             $table->foreignId('categoria_id')
-                  ->nullable()
-                  ->constrained('categorias')
-                  ->nullOnDelete()
-                  ->comment('Categorización del producto');
-                  
+                ->nullable()
+                ->constrained('categorias')
+                ->nullOnDelete();
+                
             $table->foreignId('marca_id')
-                  ->nullable()
-                  ->constrained('marcas')
-                  ->nullOnDelete()
-                  ->comment('Marca asociada');
+                ->nullable()
+                ->constrained('marcas')
+                ->nullOnDelete();
 
-            // ===== 5. METADATOS =====
-            $table->timestamps();
-            $table->softDeletes();
+            // Metadata para atributos dinámicos
+            $table->json('metadata')->nullable();
 
-            // ===== 6. ÍNDICES =====
+            // Timestamps con precisión mejorada
+            $table->timestamps(6);
+            $table->softDeletes('deleted_at', 6);
+
+            // Índices optimizados
             $table->index(['numero_serie', 'numero_inventario'], 'productos_identificadores_idx');
             $table->index('estado');
             $table->index('deleted_at');

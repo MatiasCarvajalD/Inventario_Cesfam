@@ -2,24 +2,19 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Builder;
-use App\Enums\EstadoProducto;
+use App\Enums\ProductoEstado;
 
 class Producto extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $table = 'productos';
-    protected $primaryKey = 'id';
-
     protected $fillable = [
-        'numero_inventario',
         'numero_serie',
+        'numero_inventario', 
         'nombre',
         'descripcion',
         'cantidad',
@@ -27,138 +22,115 @@ class Producto extends Model
         'ubicacion',
         'estado',
         'categoria_id',
-        'marca_id'
-    ];
-
-    protected $hidden = [
-        'created_at',
-        'updated_at',
-        'deleted_at'
+        'marca_id',
+        'metadata'
     ];
 
     protected $casts = [
-        'estado' => EstadoProducto::class,
-        'cantidad' => 'integer',
+        'estado' => ProductoEstado::class,
+        'metadata' => 'array',
         'created_at' => 'datetime:Y-m-d H:i:s',
         'updated_at' => 'datetime:Y-m-d H:i:s',
     ];
 
-    /**
-     * Comportamientos al iniciar el modelo
-     */
-    protected static function booted()
+    // Atributo computado modernizado (Laravel 12)
+    protected function numeroInventario(): Attribute
     {
-        // Genera número de inventario automáticamente si no existe
-        static::creating(function ($producto) {
-            if (empty($producto->numero_inventario)) {
-                $ultimoId = self::withTrashed()->max('id') ?? 0;
-                $producto->numero_inventario = 'INV-'.date('Y').'-'.str_pad($ultimoId + 1, 4, '0', STR_PAD_LEFT);
-            }
-        });
-
-        // Previene eliminar productos con movimientos asociados
-        static::deleting(function ($producto) {
-            if ($producto->movimientos()->exists()) {
-                throw new \Exception('No se puede eliminar: tiene movimientos registrados');
-            }
-        });
+        return Attribute::make(
+            get: fn (?string $value) => $value ?: 'INV-'.now()->format('Y').'-'.str($this->id ?? self::count() + 1)->padLeft(4, '0'),
+            set: fn (string $value) => strtoupper($value)
+        )->shouldCache();
     }
 
-    /**
-     * Relación con la categoría (opcional)
-     */
-    public function categoria(): BelongsTo
+    // Relaciones con sintaxis mejorada
+    public function categoria()
     {
-        return $this->belongsTo(Categoria::class, 'categoria_id')
+        return $this->belongsTo(Categoria::class)
             ->withDefault(['nombre' => 'Sin categoría'])
             ->withTrashed();
     }
 
-    /**
-     * Relación con la marca (opcional)
-     */
-    public function marca(): BelongsTo
+    public function marca()
     {
-        return $this->belongsTo(Marca::class, 'marca_id')
+        return $this->belongsTo(Marca::class)
             ->withDefault(['nombre' => 'Sin marca'])
             ->withTrashed();
     }
 
-    /**
-     * Relación con los movimientos (historial)
-     */
-    public function movimientos(): HasMany
+    public function movimientos()
     {
-        return $this->hasMany(Movimiento::class, 'producto_id')
-            ->orderBy('created_at', 'desc');
+        return $this->hasMany(Movimiento::class)
+            ->orderByDesc('created_at')
+            ->cacheFor(now()->addHours(6)); // Cache de relación
+    }
+
+    // Búsqueda full-text con soporte Laravel 12
+    public function scopeBusquedaAvanzada($query, string $termino)
+    {
+        return $query->when($termino, fn($q) => $q->whereFullText([
+            'nombre', 'descripcion', 'numero_inventario', 'numero_serie'
+        ], $termino));
+    }
+
+    // Métodos de negocio mejorados
+    public function registrarMovimiento(string $tipo, int $cantidad, ?string $motivo = null): Movimiento
+    {
+        return Movimiento::registrar($this, TipoMovimiento::from($tipo), $cantidad, $motivo);
+    }
+
+    public function actualizarStock(int $nuevaCantidad, bool $forzar = false): void
+    {
+        throw_if(
+            !$forzar && !$this->estado->permiteMovimientos(),
+            \RuntimeException::class,
+            'No se puede modificar el stock en el estado actual: '.$this->estado->label()
+        );
+
+        throw_if(
+            $nuevaCantidad < 0,
+            \InvalidArgumentException::class,
+            'La cantidad no puede ser negativa'
+        );
+
+        $this->forceFill(['cantidad' => $nuevaCantidad])->save();
     }
 
     /**
-     * Scope: Productos disponibles
-     */
-    public function scopeDisponibles(Builder $query): Builder
-    {
-        return $query->where('estado', EstadoProducto::DISPONIBLE->value);
-    }
-
-    /**
-     * Scope: Búsqueda avanzada
-     */
-    public function scopeBuscar(Builder $query, string $termino): Builder
-    {
-        return $query->where('nombre', 'like', "%{$termino}%")
-            ->orWhere('numero_inventario', 'like', "%{$termino}%")
-            ->orWhere('numero_serie', 'like', "%{$termino}%")
-            ->orWhere('modelo', 'like', "%{$termino}%")
-            ->orWhereHas('categoria', fn($q) => $q->where('nombre', 'like', "%{$termino}%"))
-            ->orWhereHas('marca', fn($q) => $q->where('nombre', 'like', "%{$termino}%"));
-    }
-
-    /**
-     * Scope: Productos con bajo stock
-     */
-    public function scopeBajoStock(Builder $query, int $nivel = 5): Builder
-    {
-        return $query->where('cantidad', '<=', $nivel);
-    }
-
-    /**
-     * Verifica si el producto está disponible
+     * Verifica si el producto está disponible para movimientos
+     * (Ahora usa el Enum directamente para mayor consistencia)
      */
     public function estaDisponible(): bool
     {
-        return $this->estado === EstadoProducto::DISPONIBLE && $this->cantidad > 0;
+        return $this->estado === ProductoEstado::DISPONIBLE;
     }
 
     /**
-     * Obtiene la ubicación formateada
+     * Versión mejorada que considera múltiples estados como "disponible"
      */
-    public function ubicacionFormateada(): string
+    public function estaDisponiblePara(string $accion): bool
     {
-        return $this->ubicacion ?? 'Sin ubicación asignada';
+        return match($accion) {
+            'venta' => in_array($this->estado, [
+                ProductoEstado::DISPONIBLE,
+                ProductoEstado::RESERVADO
+            ]),
+            'movimiento' => $this->estado->permiteMovimientos(),
+            default => $this->estaDisponible(),
+        };
     }
-
-    /**
-     * Cambia el estado del producto con validación
-     * @throws \Exception Si el producto está dado de baja
-     */
-    public function cambiarEstado(EstadoProducto $estado): void
+    public function cambiarEstado(ProductoEstado $nuevoEstado): void
     {
-        if ($this->estado === EstadoProducto::BAJA) {
-            throw new \Exception('Producto dado de baja no puede cambiar estado');
-        }
-        
-        $this->update(['estado' => $estado]);
+        throw_unless(
+            $this->estado->puedeTransicionarA($nuevoEstado),
+            \RuntimeException::class,
+            "Transición no permitida de {$this->estado->label()} a {$nuevoEstado->label()}"
+        );
+
+        $this->update(['estado' => $nuevoEstado]);
     }
 
-    /**
-     * Registra un movimiento y actualiza el stock
-     */
-    public function registrarMovimiento(
-        string $tipo, 
-        int $cantidad, 
-        string $motivo = null
-    ): Movimiento {
-        return Movimiento::registrar($this, $tipo, $cantidad, $motivo);
+    public function scopePorEstado($query, ProductoEstado $estado)
+    {
+        return $query->where('estado', $estado->value);
     }
 }
