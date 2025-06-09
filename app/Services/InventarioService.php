@@ -14,7 +14,7 @@ class InventarioService
         Producto $producto,
         int $cantidad,
         string $motivo,
-        ?string $responsable = null
+        string $responsable = null
     ): Movimiento {
         return DB::transaction(function () use ($producto, $cantidad, $motivo, $responsable) {
             $tipo = $cantidad > 0 ? TipoMovimiento::ENTRADA : TipoMovimiento::SALIDA;
