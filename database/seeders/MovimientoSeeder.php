@@ -1,7 +1,8 @@
-// database/seeders/MovimientoSeeder.php
 <?php
 
 namespace Database\Seeders;
+
+// database/seeders/MovimientoSeeder.php
 
 use App\Enums\TipoMovimiento;
 use App\Models\Movimiento;

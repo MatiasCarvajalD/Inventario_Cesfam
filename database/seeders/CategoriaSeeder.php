@@ -1,5 +1,5 @@
-// database/seeders/CategoriaSeeder.php
 <?php
+// database/seeders/CategoriaSeeder.php
 
 namespace Database\Seeders;
 

@@ -1,7 +1,8 @@
-// database/seeders/ProductoSeeder.php
 <?php
 
 namespace Database\Seeders;
+
+// database/seeders/ProductoSeeder.php
 
 use App\Enums\ProductoEstado;
 use App\Models\Producto;

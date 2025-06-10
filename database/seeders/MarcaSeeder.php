@@ -1,7 +1,8 @@
-// database/seeders/MarcaSeeder.php
 <?php
 
 namespace Database\Seeders;
+
+// database/seeders/MarcaSeeder.php
 
 use App\Models\Marca;
 use Illuminate\Database\Seeder;
