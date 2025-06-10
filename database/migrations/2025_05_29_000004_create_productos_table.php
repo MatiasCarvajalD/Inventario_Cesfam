@@ -3,6 +3,7 @@
 use App\Enums\ProductoEstado;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Migrations\Migration; 
 
 return new class extends Migration
 {

@@ -12,6 +12,7 @@ use App\Services\InventarioService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Cache;
+use App\Http\Controllers\Controller;
 
 class ProductoController extends Controller
 {
